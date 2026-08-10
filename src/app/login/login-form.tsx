@@ -1,15 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => {
+    if (searchParams.get("error") === "no-team") {
+      return "Esa cuenta no es de técnico. Usa la cuenta del equipo (ej. tony).";
+    }
+    return null;
+  });
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: FormEvent) {
@@ -18,19 +24,49 @@ export default function LoginForm() {
     setError(null);
 
     const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
+
+    // Por si quedó otra sesión pegada
+    await supabase.auth.signOut();
+
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
       password,
     });
 
-    setLoading(false);
-
     if (signInError) {
-      setError(signInError.message);
+      setLoading(false);
+      setError(
+        signInError.message === "Invalid login credentials"
+          ? "Correo o contraseña incorrectos."
+          : signInError.message,
+      );
       return;
     }
 
-    router.push("/tickets");
+    const userId = data.user?.id;
+    if (!userId) {
+      setLoading(false);
+      setError("No se pudo iniciar sesión.");
+      return;
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (profile?.role !== "tecnico" && profile?.role !== "admin") {
+      await supabase.auth.signOut();
+      setLoading(false);
+      setError(
+        "Esta cuenta no tiene rol de técnico. Pide al admin que te active el acceso.",
+      );
+      return;
+    }
+
+    setLoading(false);
+    router.replace("/tickets");
     router.refresh();
   }
 
@@ -44,7 +80,7 @@ export default function LoginForm() {
           Acceso técnicos
         </h1>
         <p className="mt-2 text-sm text-muted">
-          Solo personal del ISP. Los clientes reportan sin cuenta en la inicio.
+          Entra con tu correo de técnico. Los clientes no usan esta pantalla.
         </p>
       </div>
 
@@ -60,6 +96,8 @@ export default function LoginForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full rounded-2xl border border-border bg-surface/50 px-4 py-3 outline-none ring-brand/30 transition focus:ring-2"
+            placeholder="tecnico@tuisp.com"
+            autoComplete="email"
           />
         </label>
 
@@ -72,6 +110,7 @@ export default function LoginForm() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-2xl border border-border bg-surface/50 px-4 py-3 outline-none ring-brand/30 transition focus:ring-2"
+            autoComplete="current-password"
           />
         </label>
 
@@ -86,7 +125,7 @@ export default function LoginForm() {
           disabled={loading}
           className="w-full rounded-2xl bg-brand px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:opacity-60"
         >
-          {loading ? "Entrando…" : "Entrar"}
+          {loading ? "Entrando…" : "Entrar a la bandeja"}
         </button>
       </form>
 

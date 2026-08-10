@@ -19,16 +19,20 @@ export default function HomePage() {
 
       <PublicReportForm />
 
-      <p className="mt-6 text-center text-sm text-muted">
-        ¿Ya reportaste?{" "}
-        <Link href="/consultar" className="font-medium text-brand hover:underline">
-          Consulta el estado
+      <div className="mt-6 space-y-3 text-center text-sm">
+        <p className="text-muted">
+          ¿Ya reportaste?{" "}
+          <Link href="/consultar" className="font-medium text-brand hover:underline">
+            Consulta el estado
+          </Link>
+        </p>
+        <Link
+          href="/login"
+          className="inline-flex w-full items-center justify-center rounded-2xl border border-border bg-white px-4 py-3 font-semibold text-brand-dark transition hover:border-brand/40"
+        >
+          Acceso técnicos →
         </Link>
-        <span className="mx-2 text-border">·</span>
-        <Link href="/login" className="font-medium text-brand hover:underline">
-          Acceso técnicos
-        </Link>
-      </p>
+      </div>
     </div>
   );
 }

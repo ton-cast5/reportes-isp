@@ -32,16 +32,20 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isAuthRoute =
     path.startsWith("/login") || path.startsWith("/register");
-  const isPublicRoute =
-    path === "/" ||
-    path.startsWith("/consultar") ||
-    path.startsWith("/auth/") ||
-    path.startsWith("/_next") ||
-    path.startsWith("/favicon") ||
-    /\.[a-zA-Z0-9]+$/.test(path);
-
   const isTeamRoute =
     path.startsWith("/tickets") || path.startsWith("/profile");
+
+  let role: string | null = null;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    role = profile?.role ?? null;
+  }
+
+  const isTeam = role === "tecnico" || role === "admin";
 
   if (!user && isTeamRoute) {
     const url = request.nextUrl.clone();
@@ -50,30 +54,26 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (!user && !isAuthRoute && !isPublicRoute && isTeamRoute) {
+  // Cuenta sin rol técnico intentando entrar al panel
+  if (user && isTeamRoute && !isTeam) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    url.searchParams.set("error", "no-team");
     return NextResponse.redirect(url);
   }
 
-  if (user && isAuthRoute) {
+  // Solo redirigir login → bandeja si YA eres técnico
+  if (user && isAuthRoute && isTeam) {
     const url = request.nextUrl.clone();
     url.pathname = "/tickets";
     return NextResponse.redirect(url);
   }
 
-  if (user && path === "/") {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (profile?.role === "tecnico" || profile?.role === "admin") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/tickets";
-      return NextResponse.redirect(url);
-    }
+  // Técnico en la home pública → bandeja
+  if (user && path === "/" && isTeam) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/tickets";
+    return NextResponse.redirect(url);
   }
 
   return supabaseResponse;
