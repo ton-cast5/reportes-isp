@@ -15,7 +15,10 @@ Sistema web de tickets para reportes de servicio de un ISP.
 - Adjuntar imágenes y videos (hasta 50 MB)
 - Listado y detalle de tickets
 - Comentarios e historial de estados
-- Roles: `client`, `staff`, `admin` (staff puede cambiar estados)
+- Roles: `client`, `tecnico`, `admin`
+  - Cliente: crea y ve solo sus reportes
+  - Técnico: bandeja compartida, toma/asigna tickets, cambia estados
+  - Admin: mismo panel técnico (+ gestión futura)
 
 ## Variables de entorno
 
@@ -54,13 +57,20 @@ npm run dev
 - Bucket: `ticket-evidence`
 - Tablas: `profiles`, `ticket_categories`, `tickets`, `ticket_attachments`, `ticket_comments`, `ticket_status_history`
 
-Promover usuario a staff/admin:
+Promover usuario a técnico/admin:
 
 ```sql
 update public.profiles
-set role = 'staff' -- o 'admin'
+set role = 'tecnico' -- o 'admin'
 where id = '<user-uuid>';
 ```
+
+### Cómo trabajan los 4 técnicos
+
+1. Todos ven la **misma bandeja** (tickets de todos los clientes).
+2. Cualquiera puede **Tomar ticket** → se le asigna y pasa a “En proceso”.
+3. También pueden **reasignar** a otro técnico del equipo.
+4. El cliente solo ve sus propios reportes.
 
 ## Repo
 

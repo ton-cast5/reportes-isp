@@ -1,22 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, useTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
+import {
+  assignTicket,
+  claimTicket,
+  updateTicketStatus,
+} from "@/app/(app)/actions";
 import { PriorityBadge, StatusBadge } from "@/components/badges";
 import {
+  ROLE_LABELS,
   STATUS_LABELS,
   formatDate,
   formatTicketNumber,
 } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/client";
-import type {
-  Ticket,
-  TicketAttachment,
-  TicketComment,
-  TicketStatus,
-  TicketStatusHistory,
-  UserRole,
+import {
+  isTeamRole,
+  type Profile,
+  type Ticket,
+  type TicketAttachment,
+  type TicketComment,
+  type TicketStatus,
+  type TicketStatusHistory,
+  type UserRole,
 } from "@/lib/types";
 
 type SignedAttachment = TicketAttachment & { url: string | null };
@@ -25,18 +33,24 @@ export default function TicketDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  const [pending, startTransition] = useTransition();
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [attachments, setAttachments] = useState<SignedAttachment[]>([]);
   const [comments, setComments] = useState<TicketComment[]>([]);
   const [history, setHistory] = useState<TicketStatusHistory[]>([]);
+  const [tecnicos, setTecnicos] = useState<Pick<Profile, "id" | "full_name">[]>(
+    [],
+  );
+  const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<UserRole>("client");
   const [comment, setComment] = useState("");
   const [status, setStatus] = useState<TicketStatus>("open");
+  const [assigneeId, setAssigneeId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const isStaff = role === "staff" || role === "admin";
+  const team = isTeamRole(role);
 
   async function load() {
     setLoading(true);
@@ -49,6 +63,7 @@ export default function TicketDetailPage() {
       router.push("/login");
       return;
     }
+    setUserId(user.id);
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -56,11 +71,19 @@ export default function TicketDetailPage() {
       .eq("id", user.id)
       .single();
 
-    if (profile?.role) setRole(profile.role as UserRole);
+    const currentRole = (profile?.role as UserRole) || "client";
+    setRole(currentRole);
 
     const { data: ticketData, error: ticketError } = await supabase
       .from("tickets")
-      .select("*, ticket_categories(name)")
+      .select(
+        `
+        *,
+        ticket_categories(name),
+        reporter:profiles!tickets_reporter_id_fkey(full_name, phone),
+        assignee:profiles!tickets_assignee_id_fkey(full_name)
+      `,
+      )
       .eq("id", params.id)
       .single();
 
@@ -70,8 +93,10 @@ export default function TicketDetailPage() {
       return;
     }
 
-    setTicket(ticketData as Ticket);
-    setStatus((ticketData as Ticket).status);
+    const t = ticketData as Ticket;
+    setTicket(t);
+    setStatus(t.status);
+    setAssigneeId(t.assignee_id || "");
 
     const [{ data: atts }, { data: cmts }, { data: hist }] = await Promise.all([
       supabase
@@ -90,6 +115,15 @@ export default function TicketDetailPage() {
         .eq("ticket_id", params.id)
         .order("created_at"),
     ]);
+
+    if (isTeamRole(currentRole)) {
+      const { data: teamMembers } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("role", ["tecnico", "admin"])
+        .order("full_name");
+      setTecnicos(teamMembers ?? []);
+    }
 
     const withUrls: SignedAttachment[] = [];
     for (const att of (atts as TicketAttachment[]) ?? []) {
@@ -112,17 +146,12 @@ export default function TicketDetailPage() {
 
   async function onComment(e: FormEvent) {
     e.preventDefault();
-    if (!comment.trim() || !ticket) return;
+    if (!comment.trim() || !ticket || !userId) return;
     setSaving(true);
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
 
     const { error: insertError } = await supabase.from("ticket_comments").insert({
       ticket_id: ticket.id,
-      author_id: user.id,
+      author_id: userId,
       body: comment.trim(),
       is_internal: false,
     });
@@ -134,25 +163,6 @@ export default function TicketDetailPage() {
     }
 
     setComment("");
-    await load();
-  }
-
-  async function onStatusUpdate(e: FormEvent) {
-    e.preventDefault();
-    if (!ticket || !isStaff) return;
-    setSaving(true);
-
-    const { error: updateError } = await supabase
-      .from("tickets")
-      .update({ status })
-      .eq("id", ticket.id);
-
-    setSaving(false);
-    if (updateError) {
-      setError(updateError.message);
-      return;
-    }
-
     await load();
   }
 
@@ -171,11 +181,13 @@ export default function TicketDetailPage() {
     );
   }
 
+  const canClaim = team && !ticket.assignee_id;
+
   return (
     <div className="space-y-6">
       <div>
         <Link href="/tickets" className="text-sm text-brand hover:underline">
-          ← Volver
+          ← Volver a la bandeja
         </Link>
         <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -202,6 +214,110 @@ export default function TicketDetailPage() {
         </p>
       ) : null}
 
+      {team ? (
+        <section className="space-y-4 rounded-3xl border border-brand/20 bg-surface/60 p-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-dark">
+            Acciones del técnico
+          </h2>
+
+          <div className="flex flex-wrap gap-3">
+            {canClaim ? (
+              <form
+                action={(fd) => {
+                  startTransition(async () => {
+                    await claimTicket(fd);
+                    await load();
+                    router.refresh();
+                  });
+                }}
+              >
+                <input type="hidden" name="ticketId" value={ticket.id} />
+                <button
+                  type="submit"
+                  disabled={pending}
+                  className="rounded-2xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
+                >
+                  Tomar este ticket
+                </button>
+              </form>
+            ) : null}
+          </div>
+
+          <form
+            className="grid gap-3 sm:grid-cols-[1fr_auto]"
+            action={(fd) => {
+              startTransition(async () => {
+                await assignTicket(fd);
+                await load();
+                router.refresh();
+              });
+            }}
+          >
+            <input type="hidden" name="ticketId" value={ticket.id} />
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium">
+                Asignar a técnico
+              </span>
+              <select
+                name="assigneeId"
+                value={assigneeId}
+                onChange={(e) => setAssigneeId(e.target.value)}
+                className="w-full rounded-2xl border border-border bg-white px-4 py-3 outline-none ring-brand/30 focus:ring-2"
+              >
+                <option value="">Sin asignar</option>
+                {tecnicos.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.full_name || t.id.slice(0, 8)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="submit"
+              disabled={pending}
+              className="self-end rounded-2xl border border-border bg-white px-4 py-3 text-sm font-semibold hover:border-brand/40 disabled:opacity-60"
+            >
+              Guardar asignación
+            </button>
+          </form>
+
+          <form
+            className="grid gap-3 sm:grid-cols-[1fr_auto]"
+            action={(fd) => {
+              startTransition(async () => {
+                await updateTicketStatus(fd);
+                await load();
+                router.refresh();
+              });
+            }}
+          >
+            <input type="hidden" name="ticketId" value={ticket.id} />
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium">Estado</span>
+              <select
+                name="status"
+                value={status}
+                onChange={(e) => setStatus(e.target.value as TicketStatus)}
+                className="w-full rounded-2xl border border-border bg-white px-4 py-3 outline-none ring-brand/30 focus:ring-2"
+              >
+                {(Object.keys(STATUS_LABELS) as TicketStatus[]).map((key) => (
+                  <option key={key} value={key}>
+                    {STATUS_LABELS[key]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="submit"
+              disabled={pending}
+              className="self-end rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
+            >
+              Actualizar estado
+            </button>
+          </form>
+        </section>
+      ) : null}
+
       <section className="rounded-3xl border border-border bg-white/90 p-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
           Detalle
@@ -209,12 +325,12 @@ export default function TicketDetailPage() {
         <p className="mt-3 whitespace-pre-wrap text-foreground">{ticket.description}</p>
         <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-muted">Contacto</dt>
-            <dd>{ticket.contact_name || "—"}</dd>
+            <dt className="text-muted">Cliente</dt>
+            <dd>{ticket.reporter?.full_name || ticket.contact_name || "—"}</dd>
           </div>
           <div>
             <dt className="text-muted">Teléfono</dt>
-            <dd>{ticket.contact_phone || "—"}</dd>
+            <dd>{ticket.contact_phone || ticket.reporter?.phone || "—"}</dd>
           </div>
           <div>
             <dt className="text-muted">Dirección</dt>
@@ -225,12 +341,12 @@ export default function TicketDetailPage() {
             <dd>{ticket.zone || "—"}</dd>
           </div>
           <div>
-            <dt className="text-muted">Creado</dt>
-            <dd>{formatDate(ticket.created_at)}</dd>
+            <dt className="text-muted">Técnico asignado</dt>
+            <dd>{ticket.assignee?.full_name || "Sin asignar"}</dd>
           </div>
           <div>
-            <dt className="text-muted">Actualizado</dt>
-            <dd>{formatDate(ticket.updated_at)}</dd>
+            <dt className="text-muted">Creado</dt>
+            <dd>{formatDate(ticket.created_at)}</dd>
           </div>
         </dl>
       </section>
@@ -269,35 +385,6 @@ export default function TicketDetailPage() {
         )}
       </section>
 
-      {isStaff ? (
-        <form
-          onSubmit={onStatusUpdate}
-          className="flex flex-col gap-3 rounded-3xl border border-border bg-white/90 p-6 sm:flex-row sm:items-end"
-        >
-          <label className="block flex-1">
-            <span className="mb-1.5 block text-sm font-medium">Cambiar estado</span>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as TicketStatus)}
-              className="w-full rounded-2xl border border-border bg-surface/40 px-4 py-3 outline-none ring-brand/30 focus:ring-2"
-            >
-              {(Object.keys(STATUS_LABELS) as TicketStatus[]).map((key) => (
-                <option key={key} value={key}>
-                  {STATUS_LABELS[key]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
-          >
-            Guardar estado
-          </button>
-        </form>
-      ) : null}
-
       <section className="rounded-3xl border border-border bg-white/90 p-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
           Comentarios
@@ -309,7 +396,10 @@ export default function TicketDetailPage() {
             comments.map((c) => (
               <li key={c.id} className="rounded-2xl bg-surface/50 px-4 py-3">
                 <p className="text-xs text-muted">
-                  {c.profiles?.full_name || "Usuario"} · {formatDate(c.created_at)}
+                  {c.profiles?.full_name || "Usuario"}
+                  {c.profiles?.role ? ` · ${ROLE_LABELS[c.profiles.role]}` : ""}
+                  {" · "}
+                  {formatDate(c.created_at)}
                 </p>
                 <p className="mt-1 whitespace-pre-wrap text-sm">{c.body}</p>
               </li>

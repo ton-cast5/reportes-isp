@@ -17,7 +17,7 @@ export const PRIORITY_LABELS: Record<TicketPriority, string> = {
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   client: "Cliente",
-  staff: "Soporte",
+  tecnico: "Técnico",
   admin: "Admin",
 };
 

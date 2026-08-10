@@ -1,4 +1,4 @@
-export type UserRole = "client" | "staff" | "admin";
+export type UserRole = "client" | "tecnico" | "admin";
 export type TicketStatus =
   | "open"
   | "in_progress"
@@ -49,7 +49,9 @@ export type Ticket = {
   closed_at: string | null;
   created_at: string;
   updated_at: string;
-  ticket_categories?: TicketCategory | null;
+  ticket_categories?: Pick<TicketCategory, "name"> | null;
+  reporter?: Pick<Profile, "full_name" | "phone"> | null;
+  assignee?: Pick<Profile, "full_name"> | null;
 };
 
 export type TicketAttachment = {
@@ -83,3 +85,7 @@ export type TicketStatusHistory = {
   note: string | null;
   created_at: string;
 };
+
+export function isTeamRole(role?: UserRole | null) {
+  return role === "tecnico" || role === "admin";
+}

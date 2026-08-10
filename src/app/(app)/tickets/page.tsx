@@ -1,11 +1,21 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PriorityBadge, StatusBadge } from "@/components/badges";
+import { TechnicianInbox } from "@/components/technician-inbox";
 import { formatDate, formatTicketNumber } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/server";
-import type { Ticket } from "@/lib/types";
+import { isTeamRole, type Ticket, type UserRole } from "@/lib/types";
 
-export default async function TicketsPage() {
+type Vista = "todos" | "sin-asignar" | "mios" | "abiertos";
+
+export default async function TicketsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ vista?: string }>;
+}) {
+  const params = await searchParams;
+  const vista = (params.vista as Vista) || "abiertos";
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -19,22 +29,45 @@ export default async function TicketsPage() {
     .eq("id", user.id)
     .single();
 
+  const role = profile?.role as UserRole | undefined;
+  const team = isTeamRole(role);
+
   const { data: tickets, error } = await supabase
     .from("tickets")
-    .select("*, ticket_categories(name)")
+    .select(
+      `
+      *,
+      ticket_categories(name),
+      reporter:profiles!tickets_reporter_id_fkey(full_name, phone),
+      assignee:profiles!tickets_assignee_id_fkey(full_name)
+    `,
+    )
     .order("created_at", { ascending: false });
 
   const list = (tickets ?? []) as Ticket[];
+
+  if (team) {
+    return (
+      <>
+        {error ? (
+          <p className="mb-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            No se pudieron cargar los tickets: {error.message}
+          </p>
+        ) : null}
+        <TechnicianInbox tickets={list} userId={user.id} vista={vista} />
+      </>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="display text-3xl font-semibold tracking-tight text-brand-dark">
-            {profile?.role === "client" ? "Mis reportes" : "Bandeja de tickets"}
+            Mis reportes
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Crea un reporte, adjunta evidencias y sigue el estado del servicio.
+            Aquí ves solo tus tickets y su avance.
           </p>
         </div>
         <Link
