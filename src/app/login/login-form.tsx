@@ -1,19 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const next = searchParams.get("next") || "/tickets";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(
-    searchParams.get("error") ? "No se pudo completar el acceso." : null,
-  );
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: FormEvent) {
@@ -34,7 +30,7 @@ export default function LoginForm() {
       return;
     }
 
-    router.push(next);
+    router.push("/tickets");
     router.refresh();
   }
 
@@ -45,10 +41,10 @@ export default function LoginForm() {
           RI
         </div>
         <h1 className="display text-3xl font-semibold tracking-tight text-brand-dark">
-          Reportes ISP
+          Acceso técnicos
         </h1>
         <p className="mt-2 text-sm text-muted">
-          Inicia sesión para crear y dar seguimiento a tus reportes.
+          Solo personal del ISP. Los clientes reportan sin cuenta en la inicio.
         </p>
       </div>
 
@@ -64,7 +60,6 @@ export default function LoginForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full rounded-2xl border border-border bg-surface/50 px-4 py-3 outline-none ring-brand/30 transition focus:ring-2"
-            placeholder="tu@correo.com"
           />
         </label>
 
@@ -77,7 +72,6 @@ export default function LoginForm() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-2xl border border-border bg-surface/50 px-4 py-3 outline-none ring-brand/30 transition focus:ring-2"
-            placeholder="••••••••"
           />
         </label>
 
@@ -97,9 +91,8 @@ export default function LoginForm() {
       </form>
 
       <p className="mt-6 text-center text-sm text-muted">
-        ¿No tienes cuenta?{" "}
-        <Link href="/register" className="font-medium text-brand hover:underline">
-          Regístrate
+        <Link href="/" className="font-medium text-brand hover:underline">
+          ← Volver al reporte de clientes
         </Link>
       </p>
     </div>

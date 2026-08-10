@@ -34,15 +34,25 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/login") || path.startsWith("/register");
   const isPublicRoute =
     path === "/" ||
+    path.startsWith("/consultar") ||
     path.startsWith("/auth/") ||
     path.startsWith("/_next") ||
     path.startsWith("/favicon") ||
     /\.[a-zA-Z0-9]+$/.test(path);
 
-  if (!user && !isAuthRoute && !isPublicRoute) {
+  const isTeamRoute =
+    path.startsWith("/tickets") || path.startsWith("/profile");
+
+  if (!user && isTeamRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", path);
+    return NextResponse.redirect(url);
+  }
+
+  if (!user && !isAuthRoute && !isPublicRoute && isTeamRoute) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
@@ -50,6 +60,20 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/tickets";
     return NextResponse.redirect(url);
+  }
+
+  if (user && path === "/") {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profile?.role === "tecnico" || profile?.role === "admin") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/tickets";
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;

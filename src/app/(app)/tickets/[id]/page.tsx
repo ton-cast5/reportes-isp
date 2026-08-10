@@ -8,13 +8,15 @@ import {
   claimTicket,
   updateTicketStatus,
 } from "@/app/(app)/actions";
-import { PriorityBadge, StatusBadge } from "@/components/badges";
+import { StatusBadge } from "@/components/badges";
 import {
   ROLE_LABELS,
   STATUS_LABELS,
   formatDate,
   formatTicketNumber,
 } from "@/lib/labels";
+import { mapsSearchUrl, mapsUrl } from "@/lib/maps";
+import { telUrl, whatsappUrl } from "@/lib/phone";
 import { createClient } from "@/lib/supabase/client";
 import {
   isTeamRole,
@@ -74,6 +76,12 @@ export default function TicketDetailPage() {
     const currentRole = (profile?.role as UserRole) || "client";
     setRole(currentRole);
 
+    if (!isTeamRole(currentRole)) {
+      setError("Solo el equipo técnico puede ver este panel.");
+      setLoading(false);
+      return;
+    }
+
     const { data: ticketData, error: ticketError } = await supabase
       .from("tickets")
       .select(
@@ -98,32 +106,31 @@ export default function TicketDetailPage() {
     setStatus(t.status);
     setAssigneeId(t.assignee_id || "");
 
-    const [{ data: atts }, { data: cmts }, { data: hist }] = await Promise.all([
-      supabase
-        .from("ticket_attachments")
-        .select("*")
-        .eq("ticket_id", params.id)
-        .order("created_at"),
-      supabase
-        .from("ticket_comments")
-        .select("*, profiles(full_name, role)")
-        .eq("ticket_id", params.id)
-        .order("created_at"),
-      supabase
-        .from("ticket_status_history")
-        .select("*")
-        .eq("ticket_id", params.id)
-        .order("created_at"),
-    ]);
+    const [{ data: atts }, { data: cmts }, { data: hist }, { data: teamMembers }] =
+      await Promise.all([
+        supabase
+          .from("ticket_attachments")
+          .select("*")
+          .eq("ticket_id", params.id)
+          .order("created_at"),
+        supabase
+          .from("ticket_comments")
+          .select("*, profiles(full_name, role)")
+          .eq("ticket_id", params.id)
+          .order("created_at"),
+        supabase
+          .from("ticket_status_history")
+          .select("*")
+          .eq("ticket_id", params.id)
+          .order("created_at"),
+        supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("role", ["tecnico", "admin"])
+          .order("full_name"),
+      ]);
 
-    if (isTeamRole(currentRole)) {
-      const { data: teamMembers } = await supabase
-        .from("profiles")
-        .select("id, full_name")
-        .in("role", ["tecnico", "admin"])
-        .order("full_name");
-      setTecnicos(teamMembers ?? []);
-    }
+    setTecnicos(teamMembers ?? []);
 
     const withUrls: SignedAttachment[] = [];
     for (const att of (atts as TicketAttachment[]) ?? []) {
@@ -182,12 +189,27 @@ export default function TicketDetailPage() {
   }
 
   const canClaim = team && !ticket.assignee_id;
+  const wa = ticket.contact_phone
+    ? whatsappUrl(
+        ticket.contact_phone,
+        `Hola ${ticket.contact_name || ""}, somos soporte ISP. Sobre tu reporte ${formatTicketNumber(ticket.ticket_number)}.`,
+      )
+    : null;
+  const call = ticket.contact_phone ? telUrl(ticket.contact_phone) : null;
+  const map =
+    ticket.lat != null && ticket.lng != null
+      ? mapsUrl(ticket.lat, ticket.lng)
+      : ticket.service_address
+        ? mapsSearchUrl(
+            [ticket.service_address, ticket.zone].filter(Boolean).join(", "),
+          )
+        : null;
 
   return (
     <div className="space-y-6">
       <div>
         <Link href="/tickets" className="text-sm text-brand hover:underline">
-          ← Volver a la bandeja
+          ← Bandeja
         </Link>
         <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -198,13 +220,11 @@ export default function TicketDetailPage() {
                 : ""}
             </p>
             <h1 className="display mt-1 text-3xl font-semibold tracking-tight text-brand-dark">
-              {ticket.title}
+              {ticket.contact_name || "Sin titular"}
             </h1>
+            <p className="mt-1 text-sm text-muted">{ticket.title}</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <StatusBadge status={ticket.status} />
-            <PriorityBadge priority={ticket.priority} />
-          </div>
+          <StatusBadge status={ticket.status} />
         </div>
       </div>
 
@@ -214,123 +234,70 @@ export default function TicketDetailPage() {
         </p>
       ) : null}
 
-      {team ? (
-        <section className="space-y-4 rounded-3xl border border-brand/20 bg-surface/60 p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-dark">
-            Acciones del técnico
-          </h2>
-
-          <div className="flex flex-wrap gap-3">
-            {canClaim ? (
-              <form
-                action={(fd) => {
-                  startTransition(async () => {
-                    await claimTicket(fd);
-                    await load();
-                    router.refresh();
-                  });
-                }}
-              >
-                <input type="hidden" name="ticketId" value={ticket.id} />
-                <button
-                  type="submit"
-                  disabled={pending}
-                  className="rounded-2xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
-                >
-                  Tomar este ticket
-                </button>
-              </form>
-            ) : null}
-          </div>
-
+      <div className="flex flex-wrap gap-2">
+        {wa ? (
+          <a
+            href={wa}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
+          >
+            WhatsApp {ticket.contact_phone}
+          </a>
+        ) : null}
+        {call ? (
+          <a
+            href={call}
+            className="rounded-2xl border border-border bg-white px-4 py-3 text-sm font-semibold hover:border-brand/40"
+          >
+            Llamar
+          </a>
+        ) : null}
+        {map ? (
+          <a
+            href={map}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-2xl border border-border bg-white px-4 py-3 text-sm font-semibold hover:border-brand/40"
+          >
+            Abrir mapa
+          </a>
+        ) : null}
+        {canClaim ? (
           <form
-            className="grid gap-3 sm:grid-cols-[1fr_auto]"
             action={(fd) => {
               startTransition(async () => {
-                await assignTicket(fd);
+                await claimTicket(fd);
                 await load();
                 router.refresh();
               });
             }}
           >
             <input type="hidden" name="ticketId" value={ticket.id} />
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium">
-                Asignar a técnico
-              </span>
-              <select
-                name="assigneeId"
-                value={assigneeId}
-                onChange={(e) => setAssigneeId(e.target.value)}
-                className="w-full rounded-2xl border border-border bg-white px-4 py-3 outline-none ring-brand/30 focus:ring-2"
-              >
-                <option value="">Sin asignar</option>
-                {tecnicos.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.full_name || t.id.slice(0, 8)}
-                  </option>
-                ))}
-              </select>
-            </label>
             <button
               type="submit"
               disabled={pending}
-              className="self-end rounded-2xl border border-border bg-white px-4 py-3 text-sm font-semibold hover:border-brand/40 disabled:opacity-60"
+              className="rounded-2xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
             >
-              Guardar asignación
+              Tomar ticket
             </button>
           </form>
-
-          <form
-            className="grid gap-3 sm:grid-cols-[1fr_auto]"
-            action={(fd) => {
-              startTransition(async () => {
-                await updateTicketStatus(fd);
-                await load();
-                router.refresh();
-              });
-            }}
-          >
-            <input type="hidden" name="ticketId" value={ticket.id} />
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium">Estado</span>
-              <select
-                name="status"
-                value={status}
-                onChange={(e) => setStatus(e.target.value as TicketStatus)}
-                className="w-full rounded-2xl border border-border bg-white px-4 py-3 outline-none ring-brand/30 focus:ring-2"
-              >
-                {(Object.keys(STATUS_LABELS) as TicketStatus[]).map((key) => (
-                  <option key={key} value={key}>
-                    {STATUS_LABELS[key]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="submit"
-              disabled={pending}
-              className="self-end rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
-            >
-              Actualizar estado
-            </button>
-          </form>
-        </section>
-      ) : null}
+        ) : null}
+      </div>
 
       <section className="rounded-3xl border border-border bg-white/90 p-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-          Detalle
+          Problema
         </h2>
         <p className="mt-3 whitespace-pre-wrap text-foreground">{ticket.description}</p>
         <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-muted">Cliente</dt>
-            <dd>{ticket.reporter?.full_name || ticket.contact_name || "—"}</dd>
+            <dt className="text-muted">Titular del servicio</dt>
+            <dd className="font-medium">{ticket.contact_name || "—"}</dd>
           </div>
           <div>
-            <dt className="text-muted">Teléfono</dt>
-            <dd>{ticket.contact_phone || ticket.reporter?.phone || "—"}</dd>
+            <dt className="text-muted">Teléfono / WhatsApp</dt>
+            <dd className="font-medium">{ticket.contact_phone || "—"}</dd>
           </div>
           <div>
             <dt className="text-muted">Dirección</dt>
@@ -341,14 +308,95 @@ export default function TicketDetailPage() {
             <dd>{ticket.zone || "—"}</dd>
           </div>
           <div>
-            <dt className="text-muted">Técnico asignado</dt>
-            <dd>{ticket.assignee?.full_name || "Sin asignar"}</dd>
+            <dt className="text-muted">GPS</dt>
+            <dd>
+              {ticket.lat != null && ticket.lng != null
+                ? `${ticket.lat.toFixed(5)}, ${ticket.lng.toFixed(5)}`
+                : "No compartida"}
+            </dd>
           </div>
           <div>
-            <dt className="text-muted">Creado</dt>
-            <dd>{formatDate(ticket.created_at)}</dd>
+            <dt className="text-muted">Técnico</dt>
+            <dd>{ticket.assignee?.full_name || "Sin asignar"}</dd>
           </div>
         </dl>
+      </section>
+
+      <section className="space-y-4 rounded-3xl border border-brand/20 bg-surface/60 p-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-dark">
+          Gestión rápida
+        </h2>
+
+        <form
+          className="grid gap-3 sm:grid-cols-[1fr_auto]"
+          action={(fd) => {
+            startTransition(async () => {
+              await assignTicket(fd);
+              await load();
+              router.refresh();
+            });
+          }}
+        >
+          <input type="hidden" name="ticketId" value={ticket.id} />
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium">Asignar técnico</span>
+            <select
+              name="assigneeId"
+              value={assigneeId}
+              onChange={(e) => setAssigneeId(e.target.value)}
+              className="w-full rounded-2xl border border-border bg-white px-4 py-3 outline-none ring-brand/30 focus:ring-2"
+            >
+              <option value="">Sin asignar</option>
+              {tecnicos.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.full_name || t.id.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="submit"
+            disabled={pending}
+            className="self-end rounded-2xl border border-border bg-white px-4 py-3 text-sm font-semibold hover:border-brand/40 disabled:opacity-60"
+          >
+            Guardar
+          </button>
+        </form>
+
+        <form
+          className="grid gap-3 sm:grid-cols-[1fr_auto]"
+          action={(fd) => {
+            startTransition(async () => {
+              await updateTicketStatus(fd);
+              await load();
+              router.refresh();
+            });
+          }}
+        >
+          <input type="hidden" name="ticketId" value={ticket.id} />
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium">Estado</span>
+            <select
+              name="status"
+              value={status}
+              onChange={(e) => setStatus(e.target.value as TicketStatus)}
+              className="w-full rounded-2xl border border-border bg-white px-4 py-3 outline-none ring-brand/30 focus:ring-2"
+            >
+              {(Object.keys(STATUS_LABELS) as TicketStatus[]).map((key) => (
+                <option key={key} value={key}>
+                  {STATUS_LABELS[key]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="submit"
+            disabled={pending}
+            className="self-end rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
+          >
+            Actualizar
+          </button>
+        </form>
       </section>
 
       <section className="rounded-3xl border border-border bg-white/90 p-6">
@@ -356,7 +404,7 @@ export default function TicketDetailPage() {
           Evidencias
         </h2>
         {attachments.length === 0 ? (
-          <p className="mt-3 text-sm text-muted">Sin archivos adjuntos.</p>
+          <p className="mt-3 text-sm text-muted">Sin archivos.</p>
         ) : (
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             {attachments.map((att) => (
@@ -387,11 +435,11 @@ export default function TicketDetailPage() {
 
       <section className="rounded-3xl border border-border bg-white/90 p-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-          Comentarios
+          Notas del equipo
         </h2>
         <ul className="mt-4 space-y-3">
           {comments.length === 0 ? (
-            <li className="text-sm text-muted">Aún no hay comentarios.</li>
+            <li className="text-sm text-muted">Sin notas aún.</li>
           ) : (
             comments.map((c) => (
               <li key={c.id} className="rounded-2xl bg-surface/50 px-4 py-3">
@@ -412,7 +460,7 @@ export default function TicketDetailPage() {
             rows={3}
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="Escribe una actualización o pregunta…"
+            placeholder="Nota interna o seguimiento…"
             className="w-full rounded-2xl border border-border bg-surface/40 px-4 py-3 outline-none ring-brand/30 focus:ring-2"
           />
           <button
@@ -420,14 +468,14 @@ export default function TicketDetailPage() {
             disabled={saving || !comment.trim()}
             className="rounded-2xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
           >
-            Publicar comentario
+            Guardar nota
           </button>
         </form>
       </section>
 
       <section className="rounded-3xl border border-border bg-white/90 p-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-          Historial de estados
+          Historial
         </h2>
         <ul className="mt-4 space-y-2 text-sm">
           {history.map((h) => (

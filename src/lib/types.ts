@@ -32,7 +32,7 @@ export type TicketCategory = {
 export type Ticket = {
   id: string;
   ticket_number: number;
-  reporter_id: string;
+  reporter_id: string | null;
   assignee_id: string | null;
   category_id: string | null;
   title: string;
@@ -44,6 +44,8 @@ export type Ticket = {
   contact_email: string | null;
   service_address: string | null;
   zone: string | null;
+  lat: number | null;
+  lng: number | null;
   preferred_visit_at: string | null;
   resolved_at: string | null;
   closed_at: string | null;
