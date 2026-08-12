@@ -19,7 +19,7 @@ Sistema de tickets para fallas de servicio ISP. Diseñado para ser más fácil q
 ### Técnico
 - Solo ve **lo que le asignaron**
 - WhatsApp + Mapa
-- Un tap en **Ya lo reparé** → se marca reparado y abre WhatsApp avisando al cliente
+- Un tap en **Ya lo reparé** → se marca reparado (sin WhatsApp; ya están en sitio)
 
 Roles: `tecnico`, `admin`
 
