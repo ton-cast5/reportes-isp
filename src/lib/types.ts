@@ -91,3 +91,7 @@ export type TicketStatusHistory = {
 export function isTeamRole(role?: UserRole | null) {
   return role === "tecnico" || role === "admin";
 }
+
+export function isAdminRole(role?: UserRole | null) {
+  return role === "admin";
+}

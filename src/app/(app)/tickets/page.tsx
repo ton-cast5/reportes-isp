@@ -1,9 +1,17 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AdminInbox } from "@/components/admin-inbox";
 import { TechnicianInbox } from "@/components/technician-inbox";
 import { createClient } from "@/lib/supabase/server";
-import { isTeamRole, type Ticket, type UserRole } from "@/lib/types";
+import {
+  isAdminRole,
+  isTeamRole,
+  type Profile,
+  type Ticket,
+  type UserRole,
+} from "@/lib/types";
 
-type Vista = "todos" | "sin-asignar" | "mios" | "abiertos";
+type Vista = "nuevos" | "en-atencion" | "reparados";
 
 export default async function TicketsPage({
   searchParams,
@@ -11,7 +19,7 @@ export default async function TicketsPage({
   searchParams: Promise<{ vista?: string }>;
 }) {
   const params = await searchParams;
-  const vista = (params.vista as Vista) || "abiertos";
+  const vista = (params.vista as Vista) || "nuevos";
 
   const supabase = await createClient();
   const {
@@ -27,11 +35,11 @@ export default async function TicketsPage({
     .single();
 
   const role = profile?.role as UserRole | undefined;
-  if (!isTeamRole(role)) {
-    redirect("/");
-  }
+  if (!isTeamRole(role)) redirect("/");
 
-  const { data: tickets, error } = await supabase
+  const admin = isAdminRole(role);
+
+  let query = supabase
     .from("tickets")
     .select(
       `
@@ -43,7 +51,22 @@ export default async function TicketsPage({
     )
     .order("created_at", { ascending: false });
 
+  if (!admin) {
+    query = query.eq("assignee_id", user.id);
+  }
+
+  const { data: tickets, error } = await query;
   const list = (tickets ?? []) as Ticket[];
+
+  let tecnicos: Pick<Profile, "id" | "full_name">[] = [];
+  if (admin) {
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("role", "tecnico")
+      .order("full_name");
+    tecnicos = data ?? [];
+  }
 
   return (
     <>
@@ -52,7 +75,11 @@ export default async function TicketsPage({
           No se pudieron cargar los tickets: {error.message}
         </p>
       ) : null}
-      <TechnicianInbox tickets={list} userId={user.id} vista={vista} />
+      {admin ? (
+        <AdminInbox tickets={list} tecnicos={tecnicos} vista={vista} />
+      ) : (
+        <TechnicianInbox tickets={list} />
+      )}
     </>
   );
 }

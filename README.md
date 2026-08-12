@@ -1,26 +1,31 @@
 # Reportes ISP
 
-Sistema de tickets para fallas de servicio ISP.
+Sistema de tickets para fallas de servicio ISP. Diseñado para ser más fácil que mandar un WhatsApp.
 
 ## Cómo funciona
 
 ### Clientes (sin cuenta)
 - Entran a `/` y reportan en menos de 1 minuto
-- Datos: titular del servicio, WhatsApp, tipo de problema, descripción, GPS y/o dirección, foto/video
+- Titular del servicio, WhatsApp, problema, GPS y/o dirección, foto/video
 - Reciben un número de ticket
-- Consultan estado en `/consultar` con ticket + teléfono
+- Consultan estado con el botón grande **¿Ya reportaste? Consulta el estado**
+- Acceso del equipo queda discreto al final (`/login`)
 
-### Técnicos / Admin (con login)
-- Entran en `/login`
-- Bandeja compartida para todo el equipo
-- Botones **WhatsApp**, **Mapa**, **Tomar**
-- Asignación entre técnicos y cambio de estado
+### Admin
+- Ve todos los reportes
+- Asigna cada uno a un técnico (pasa solo a “En atención”)
+- Deja indicaciones que el técnico asignado ve
 
-Roles: `client` (legacy), `tecnico`, `admin`
+### Técnico
+- Solo ve **lo que le asignaron**
+- WhatsApp + Mapa
+- Un tap en **Ya lo reparé** → se marca reparado y abre WhatsApp avisando al cliente
+
+Roles: `tecnico`, `admin`
 
 ## Stack
 
-Next.js + Supabase (Auth, Postgres, Storage, RLS) · Deploy en Vercel
+Next.js + Supabase · Deploy en Vercel
 
 ## Variables de entorno
 
@@ -30,13 +35,13 @@ Next.js + Supabase (Auth, Postgres, Storage, RLS) · Deploy en Vercel
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Anon / publishable key |
 | `NEXT_PUBLIC_SITE_URL` | URL pública (Vercel) |
 
-## Promover técnico
+## Promover técnico o admin
 
 ```sql
 update public.profiles p
-set role = 'tecnico'
+set role = 'tecnico' -- o 'admin'
 from auth.users u
-where u.id = p.id and u.email = 'tecnico@tuisp.com';
+where u.id = p.id and u.email = 'correo@tuisp.com';
 ```
 
 ## Repo

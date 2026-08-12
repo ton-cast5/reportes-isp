@@ -1,11 +1,19 @@
 import type { TicketPriority, TicketStatus, UserRole } from "./types";
 
 export const STATUS_LABELS: Record<TicketStatus, string> = {
-  open: "Abierto",
-  in_progress: "En proceso",
-  waiting_customer: "Esperando cliente",
-  resolved: "Resuelto",
+  open: "Nuevo",
+  in_progress: "En atención",
+  waiting_customer: "Pendiente",
+  resolved: "Reparado",
   closed: "Cerrado",
+};
+
+export const CLIENT_STATUS_COPY: Record<TicketStatus, string> = {
+  open: "Recibido. Pronto te contactamos.",
+  in_progress: "Un técnico ya lo está atendiendo.",
+  waiting_customer: "Estamos esperando una respuesta tuya.",
+  resolved: "¡Listo! Ya quedó reparado.",
+  closed: "Este reporte ya se cerró.",
 };
 
 export const PRIORITY_LABELS: Record<TicketPriority, string> = {
@@ -45,4 +53,12 @@ export function formatDate(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+export function isActiveStatus(status: TicketStatus) {
+  return status === "open" || status === "in_progress" || status === "waiting_customer";
+}
+
+export function isDoneStatus(status: TicketStatus) {
+  return status === "resolved" || status === "closed";
 }

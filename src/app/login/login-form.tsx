@@ -77,10 +77,10 @@ export default function LoginForm() {
           RI
         </div>
         <h1 className="display text-3xl font-semibold tracking-tight text-brand-dark">
-          Acceso técnicos
+          Acceso del equipo
         </h1>
         <p className="mt-2 text-sm text-muted">
-          Entra con tu correo de técnico. Los clientes no usan esta pantalla.
+          Solo personal interno. Los clientes reportan desde la inicio, sin cuenta.
         </p>
       </div>
 

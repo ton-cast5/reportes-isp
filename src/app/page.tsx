@@ -12,27 +12,24 @@ export default function HomePage() {
           Reportes ISP
         </h1>
         <p className="mt-2 text-sm text-muted sm:text-base">
-          ¿Sin internet o falla de servicio? Repórtalo aquí en menos de 1 minuto.
-          No necesitas crear cuenta.
+          ¿Sin internet? Repórtalo aquí. Sin cuenta, sin contraseña.
         </p>
       </header>
 
       <PublicReportForm />
 
-      <div className="mt-6 space-y-3 text-center text-sm">
-        <p className="text-muted">
-          ¿Ya reportaste?{" "}
-          <Link href="/consultar" className="font-medium text-brand hover:underline">
-            Consulta el estado
-          </Link>
-        </p>
-        <Link
-          href="/login"
-          className="inline-flex w-full items-center justify-center rounded-2xl border border-border bg-white px-4 py-3 font-semibold text-brand-dark transition hover:border-brand/40"
-        >
-          Acceso técnicos →
+      <Link
+        href="/consultar"
+        className="mt-6 inline-flex w-full items-center justify-center rounded-2xl bg-brand px-4 py-3.5 text-sm font-semibold text-white shadow-sm shadow-brand/20 hover:bg-brand-dark"
+      >
+        ¿Ya reportaste? Consulta el estado
+      </Link>
+
+      <p className="mt-10 text-center text-[11px] text-muted/70">
+        <Link href="/login" className="hover:text-muted">
+          Equipo
         </Link>
-      </div>
+      </p>
     </div>
   );
 }

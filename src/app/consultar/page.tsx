@@ -4,7 +4,11 @@ import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { STATUS_LABELS, formatDate, formatTicketNumber } from "@/lib/labels";
+import {
+  CLIENT_STATUS_COPY,
+  formatDate,
+  formatTicketNumber,
+} from "@/lib/labels";
 import type { TicketStatus } from "@/lib/types";
 import { Suspense } from "react";
 
@@ -59,10 +63,10 @@ function ConsultarForm() {
         ← Nuevo reporte
       </Link>
       <h1 className="display text-3xl font-semibold tracking-tight text-brand-dark">
-        Consultar reporte
+        ¿Cómo va mi reporte?
       </h1>
       <p className="mt-2 text-sm text-muted">
-        Usa tu número de ticket y el mismo teléfono del reporte.
+        Pon el número que te dimos y el mismo teléfono del reporte.
       </p>
 
       <form
@@ -111,11 +115,8 @@ function ConsultarForm() {
             {result.category_name ? ` · ${result.category_name}` : ""}
           </p>
           <p className="mt-1 text-lg font-semibold">{result.title}</p>
-          <p className="mt-3 text-sm">
-            Estado:{" "}
-            <span className="font-semibold text-brand-dark">
-              {STATUS_LABELS[result.status]}
-            </span>
+          <p className="mt-3 text-base font-semibold text-brand-dark">
+            {CLIENT_STATUS_COPY[result.status]}
           </p>
           <p className="mt-1 text-xs text-muted">
             Actualizado {formatDate(result.updated_at)}

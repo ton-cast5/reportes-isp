@@ -2,7 +2,7 @@ import Link from "next/link";
 import { signOut } from "@/app/(app)/actions";
 import { ROLE_LABELS } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/server";
-import { isTeamRole, type UserRole } from "@/lib/types";
+import { isAdminRole, type UserRole } from "@/lib/types";
 
 export async function AppHeader() {
   const supabase = await createClient();
@@ -19,12 +19,12 @@ export async function AppHeader() {
     : { data: null };
 
   const role = profile?.role as UserRole | undefined;
-  const team = isTeamRole(role);
+  const admin = isAdminRole(role);
 
   return (
     <header className="border-b border-border/80 bg-white/70 backdrop-blur-md">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-        <Link href="/tickets" className="group flex items-center gap-3">
+        <Link href="/tickets" className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand text-sm font-semibold text-white shadow-sm shadow-brand/30">
             RI
           </span>
@@ -33,7 +33,7 @@ export async function AppHeader() {
               Reportes ISP
             </p>
             <p className="text-xs text-muted">
-              {team ? "Panel técnico" : "Soporte y seguimiento"}
+              {admin ? "Panel admin" : "Tus visitas"}
             </p>
           </div>
         </Link>
@@ -41,29 +41,17 @@ export async function AppHeader() {
         {user ? (
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-sm font-medium">
                 {profile?.full_name || user.email}
               </p>
               <p className="text-xs text-muted">
                 {role ? ROLE_LABELS[role] : "—"}
               </p>
             </div>
-            <Link
-              href="/tickets"
-              className="rounded-xl border border-border bg-white px-3 py-2 text-sm text-foreground transition hover:border-brand/40 hover:text-brand"
-            >
-              {team ? "Bandeja" : "Mis tickets"}
-            </Link>
-            <Link
-              href="/profile"
-              className="rounded-xl border border-border bg-white px-3 py-2 text-sm text-foreground transition hover:border-brand/40 hover:text-brand"
-            >
-              Perfil
-            </Link>
             <form action={signOut}>
               <button
                 type="submit"
-                className="rounded-xl bg-slate-900 px-3 py-2 text-sm text-white transition hover:bg-slate-700"
+                className="rounded-xl bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-700"
               >
                 Salir
               </button>
